@@ -71,6 +71,7 @@ class Estimator
     Matrix3d ric[NUM_OF_CAM];
     Vector3d tic[NUM_OF_CAM];
 
+    // 窗口中的[P,V,R,Ba,Bg]
     Vector3d Ps[(WINDOW_SIZE + 1)];
     Vector3d Vs[(WINDOW_SIZE + 1)];
     Matrix3d Rs[(WINDOW_SIZE + 1)];
@@ -96,7 +97,7 @@ class Estimator
     MotionEstimator m_estimator;
     InitialEXRotation initial_ex_rotation;
 
-    bool first_imu;
+    bool first_imu;         // 判断是否是第一个IMU数据，初始值为false
     bool is_valid, is_key;
     bool failure_occur;
 

@@ -81,8 +81,18 @@ void Estimator::clearState()
     drift_correct_t = Vector3d::Zero();
 }
 
+/**
+ * @brief       处理IMU数据
+ * @note        IMU预积分，中值积分得到当前PQV作为优化初值
+ * @param[in]   dt 时间间隔
+ * @param[in]   linear_acceleration 线加速度
+ * @param[in]   angular_velocity 角速度
+ * @return      void
+ */
 void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {
+    // 如果是第一个imu数据，记录下线加速度和角速度
+    // first_imu=false表示是第一个imu数据
     if (!first_imu)
     {
         first_imu = true;
@@ -90,10 +100,12 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         gyr_0 = angular_velocity;
     }
 
+    // 如果pre_integrations为空，则新建一个pre_integrations
     if (!pre_integrations[frame_count])
     {
         pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
     }
+    
     if (frame_count != 0)
     {
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
@@ -104,12 +116,20 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
 
-        int j = frame_count;         
+        int j = frame_count;
+        
+        // un_acc_0 和 un_gyr 表示真值
+        // 计算上一时刻的加速度
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
+        // 根据上一时刻陀螺仪的角速度和当前时刻的角速度求出平均角速度（中值法）
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
+        // 计算当前时刻陀螺仪的姿态（旋转）矩阵。这里其实是在上一时刻的旋转矩阵基础上和当前时刻的旋转增量相乘得到的
         Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
+        // 求当前时刻的加速度
         Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
+        // 求上一时刻和当前时刻的平均加速度
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
+        // 位移（位置）更新，位置是在之前的基础上加上当前的位移量，使用的是位移公式：s = v*t + 1/2*a*t^2
         Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;
         Vs[j] += dt * un_acc;
     }

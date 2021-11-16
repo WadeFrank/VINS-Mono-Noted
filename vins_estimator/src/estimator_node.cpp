@@ -15,19 +15,24 @@
 
 Estimator estimator;
 
-std::condition_variable con;
+std::condition_variable con;  // 条件变量
 double current_time = -1;
+
 queue<sensor_msgs::ImuConstPtr> imu_buf;
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
 queue<sensor_msgs::PointCloudConstPtr> relo_buf;
+
 int sum_of_wait = 0;
 
+// 互斥量
 std::mutex m_buf;
 std::mutex m_state;
 std::mutex i_buf;
 std::mutex m_estimator;
 
 double latest_time;
+
+// IMU项[P, Q, B, Ba, Bg, a, g]
 Eigen::Vector3d tmp_P;
 Eigen::Quaterniond tmp_Q;
 Eigen::Vector3d tmp_V;
@@ -35,19 +40,24 @@ Eigen::Vector3d tmp_Ba;
 Eigen::Vector3d tmp_Bg;
 Eigen::Vector3d acc_0;
 Eigen::Vector3d gyr_0;
+
 bool init_feature = 0;
 bool init_imu = 1;
 double last_imu_t = 0;
 
+// 从IMU测量值imu_msg和上一个PVQ递推到下一个tmp_Q, tmp_P, tmp_V, 中值积分
 void predict(const sensor_msgs::ImuConstPtr &imu_msg)
 {
     double t = imu_msg->header.stamp.toSec();
+
+    // init_imu=1表示第一个IMU数据
     if (init_imu)
     {
         latest_time = t;
         init_imu = 0;
         return;
     }
+
     double dt = t - latest_time;
     latest_time = t;
 
@@ -206,17 +216,29 @@ void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 }
 
 // thread: visual-inertial odometry
+/**
+ * @brief       VIO的主线程
+ * @note        1.等待并且获取measurements：（IMUs, img_msg）s，计算dt
+ *              2.estimator.processIMU() 进行IMU预积分
+ *              estimator.setReloFrame() 设置重定位帧
+ *              estimator.setprocessImage() 处理图像帧：初始化，紧耦合的非线性优化
+ * @return      void
+ */
 void process()
 {
     while (true)
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
+
+        // 在执行getMeasurements()提取measurements时互斥锁m_buf会锁住，此时无法接收数据
+        // getMeasurements()的作用是对imu和图像数据进行对齐并组合
         std::unique_lock<std::mutex> lk(m_buf);
         con.wait(lk, [&]
                  {
             return (measurements = getMeasurements()).size() != 0;
                  });
         lk.unlock();
+
         m_estimator.lock();
         for (auto &measurement : measurements)
         {
