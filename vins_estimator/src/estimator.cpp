@@ -201,13 +201,18 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     // 需要初始化
     if (solver_flag == INITIAL)
     {
-        if (frame_count == WINDOW_SIZE)  // 滑动窗口中塞满了才进行初始化
+        // frame_count是滑动窗口中图像帧的数量，一开始初始化为0，滑动窗口总帧数WINDOW_SIZE=10
+        // 滑动窗口中塞满了才进行初始化，以确保有足够的frame参与初始化
+        if (frame_count == WINDOW_SIZE)
         {
             bool result = false;
+            // 有外参且当前帧时间戳大于初始化时间戳0.1秒，就进行初始化操作
             if( ESTIMATE_EXTRINSIC != 2 && (header.stamp.toSec() - initial_timestamp) > 0.1)  // 在上一次初始化失败后至少0.1秒才进行下一次初始化
             {
-               result = initialStructure();
-               initial_timestamp = header.stamp.toSec();
+                // 视觉惯导联合初始化
+                result = initialStructure();
+                // 更新初始化时间戳
+                initial_timestamp = header.stamp.toSec();
             }
             if(result)  // 初始化操作成功
             {

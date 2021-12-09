@@ -20,11 +20,13 @@ void FeatureManager::setRic(Matrix3d _ric[])
     }
 }
 
+// 清除特征管理器中的特征
 void FeatureManager::clearState()
 {
     feature.clear();
 }
 
+// 窗口中被跟踪的特征数量
 int FeatureManager::getFeatureCount()
 {
     int cnt = 0;
@@ -55,12 +57,13 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     double parallax_sum = 0;  // 所有特征点视差总和
     int parallax_num = 0;     // 满足某些条件的特征点个数
     last_track_num = 0;       // 被跟踪点的个数
-    // 把image map中的所有特征点放入feature list容器中
+    // 把image map中的所有特征点放入feature list容器中，
     for (auto &id_pts : image)
     {
         FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
 
         // 迭代器寻找feature list中是否有这feature_id
+        // list<FeaturePerId> feature 包含滑动窗口内的所有路标点
         int feature_id = id_pts.first;
         auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it)
                           {
