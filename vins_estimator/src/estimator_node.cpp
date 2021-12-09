@@ -22,7 +22,7 @@ queue<sensor_msgs::ImuConstPtr> imu_buf;
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
 queue<sensor_msgs::PointCloudConstPtr> relo_buf;    // 订阅pose graph node发布的回环帧数据，存到relo_buf队列中，供重定位使用
 
-int sum_of_wait = 0;
+int sum_of_wait = 0;  // 图像帧等待imu帧的次数
 
 // 互斥量
 std::mutex m_buf;       // 用于处理多个线程使用imu_buf和feature_buf的冲突
@@ -148,14 +148,14 @@ getMeasurements()
         // 一帧图像特征点数据，对应多帧imu数据,把它们进行对应，然后塞入measurements
         // 一帧图像特征点数据，与它和上一帧图像特征点数据之间的时间间隔内所有的IMU数据，以及时间戳晚于当前帧图像的第一帧IMU数据对应
         // 如下图所示：
-        //   *             *             *             *             *            （IMU数据）
-        //                                                      |                 （图像特征点数据）
+        //  *             *             *             *             *            （IMU数据）
+        //                                                    |                  （图像特征点数据）
         while (imu_buf.front()->header.stamp.toSec() < img_msg->header.stamp.toSec() + estimator.td)
         {
-            IMUs.emplace_back(imu_buf.front());  // 时间戳晚于当前帧图像的第一帧IMU数据
+            IMUs.emplace_back(imu_buf.front());  
             imu_buf.pop();
         }
-        IMUs.emplace_back(imu_buf.front());
+        IMUs.emplace_back(imu_buf.front());  // 时间戳晚于当前帧图像的第一帧IMU数据
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
         measurements.emplace_back(IMUs, img_msg);
@@ -293,23 +293,29 @@ void process()
         {
             auto img_msg = measurement.second;
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
+
+            // 遍历该组 measurement 中的各帧imu数据，进行预积分
             for (auto &imu_msg : measurement.first)
             {
-                double t = imu_msg->header.stamp.toSec();
-                double img_t = img_msg->header.stamp.toSec() + estimator.td;
-                if (t <= img_t)
+                double t = imu_msg->header.stamp.toSec();  // 最新IMU数据的时间戳
+                double img_t = img_msg->header.stamp.toSec() + estimator.td;  // 图像特征点数据的时间戳，补偿了通过优化得到的一个时间偏移
+                if (t <= img_t)  // 对于图像帧之前的所有IMU数据进行预积分
                 { 
-                    if (current_time < 0)
+                    if (current_time < 0)  // 第一次接收IMU数据时会出现这种情况
                         current_time = t;
                     double dt = t - current_time;
                     ROS_ASSERT(dt >= 0);
-                    current_time = t;
+                    current_time = t;  // 更新最近一次接收的IMU数据的时间戳
+
+                    // IMU测量值数据
                     dx = imu_msg->linear_acceleration.x;
                     dy = imu_msg->linear_acceleration.y;
                     dz = imu_msg->linear_acceleration.z;
                     rx = imu_msg->angular_velocity.x;
                     ry = imu_msg->angular_velocity.y;
                     rz = imu_msg->angular_velocity.z;
+
+                    // 预积分
                     estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
                     //printf("imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
 
@@ -334,10 +340,11 @@ void process()
                     //printf("dimu: dt:%f a: %f %f %f w: %f %f %f\n",dt_1, dx, dy, dz, rx, ry, rz);
                 }
             }
+
+            // 设置重定位用的回环帧
             // set relocalization frame
             sensor_msgs::PointCloudConstPtr relo_msg = NULL;
 
-            // 取出最后一个重定位帧
             while (!relo_buf.empty())
             {
                 relo_msg = relo_buf.front();
@@ -346,7 +353,7 @@ void process()
             if (relo_msg != NULL)
             {
                 vector<Vector3d> match_points;
-                double frame_stamp = relo_msg->header.stamp.toSec();
+                double frame_stamp = relo_msg->header.stamp.toSec();  // 回环帧的时间戳
                 for (unsigned int i = 0; i < relo_msg->points.size(); i++)
                 {
                     Vector3d u_v_id;
@@ -360,7 +367,7 @@ void process()
                 Matrix3d relo_r = relo_q.toRotationMatrix();
                 int frame_index;
                 frame_index = relo_msg->channels[0].values[7];
-                estimator.setReloFrame(frame_stamp, frame_index, match_points, relo_t, relo_r);
+                estimator.setReloFrame(frame_stamp, frame_index, match_points, relo_t, relo_r);  // 设置回环帧
             }
 
             ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());

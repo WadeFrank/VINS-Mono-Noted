@@ -21,9 +21,9 @@ ros::Publisher pub_restart;
 FeatureTracker trackerData[NUM_OF_CAM];
 double first_image_time;
 int pub_count = 1;
-bool first_image_flag = true;
-double last_image_time = 0;
-bool init_pub = 0;
+bool first_image_flag = true;  // 用于判断是否是第一帧
+double last_image_time = 0;  // 用于记录上一帧图像的时间
+bool init_pub = 0;  // 用于判断是否发布特征点（因为第一帧没有光流，所以不发布）
 
 /**
  * @brief       回调函数，对新接收到的图像进行特征点的追踪，发布

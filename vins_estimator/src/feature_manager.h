@@ -15,6 +15,9 @@ using namespace Eigen;
 
 #include "parameters.h"
 
+// 参考博客：https://blog.csdn.net/liuzheng1/article/details/90052050
+
+// 一个特征点在某一图像帧上的属性
 class FeaturePerFrame
 {
   public:
@@ -30,9 +33,9 @@ class FeaturePerFrame
         cur_td = td;
     }
     double cur_td;
-    Vector3d point;
-    Vector2d uv;
-    Vector2d velocity;
+    Vector3d point;     // 特征点空间坐标
+    Vector2d uv;        // 特征点映射到该帧上的图像坐标
+    Vector2d velocity;  // 特征点的跟踪速度
     double z;
     bool is_used;
     double parallax;
@@ -41,30 +44,33 @@ class FeaturePerFrame
     double dep_gradient;
 };
 
+// 一个特征点的属性
 class FeaturePerId
 {
   public:
-    const int feature_id;
-    int start_frame;
-    vector<FeaturePerFrame> feature_per_frame;
+    const int feature_id;  // 特征点id
+    int start_frame;       // 第一次出现该特征点的帧号
+    vector<FeaturePerFrame> feature_per_frame;  // 包含改点的所有图像帧
 
-    int used_num;
-    bool is_outlier;
+    int used_num;  // 出现的次数
+    bool is_outlier;  // 是否是外点
     bool is_margin;
-    double estimated_depth;
-    int solve_flag; // 0 haven't solve yet; 1 solve succ; 2 solve fail;
+    double estimated_depth;  // 逆深度
+    int solve_flag; // 0 haven't solve yet; 1 solve succ; 2 solve fail; 该特征点的状态，是否被三角化
 
     Vector3d gt_p;
-
+    // 以feature_id为索引，并保存了出现该角点的第一帧的id
     FeaturePerId(int _feature_id, int _start_frame)
         : feature_id(_feature_id), start_frame(_start_frame),
           used_num(0), estimated_depth(-1.0), solve_flag(0)
     {
     }
-
+    
+    // 得到该特征点最后一次跟踪到的帧号
     int endFrame();
 };
 
+// 管理所有特征点
 class FeatureManager
 {
   public:
